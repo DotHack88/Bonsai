@@ -101,6 +101,7 @@ function PhotoInput({ onCapture }){
 function AIAnalysisModal({ imageBase64, onResult, onClose }){
   const [status, setStatus] = useState("analyzing");
   const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(()=>{
     if(!imageBase64) return;
@@ -121,12 +122,17 @@ function AIAnalysisModal({ imageBase64, onResult, onClose }){
         const parsed = JSON.parse(clean);
         setResult(parsed);
         setStatus("done");
-      } catch{
+      } catch(e){
+        console.error("JSON parse error:", e);
         setResult({ specie:"Non identificata", nomeComuneIt:"Sconosciuto", salute:null, notesSalute:"Analisi non disponibile", consigli:"Riprova con una foto più nitida." });
         setStatus("done");
       }
     })
-    .catch(()=>setStatus("error"));
+    .catch(err=>{
+      console.error("AI Analysis Error:", err);
+      setErrorMsg(err.message || "Errore nell'analisi. Controlla la chiave API nel file .env");
+      setStatus("error");
+    });
   },[imageBase64]);
 
   return (
@@ -140,7 +146,15 @@ function AIAnalysisModal({ imageBase64, onResult, onClose }){
             <p style={{marginTop:16,opacity:.7,fontSize:"0.9rem"}}>Identificazione in corso…</p>
           </div>
         )}
-        {status==="error" && <p style={{color:"#f87171"}}>Errore. Riprova.</p>}
+        {status==="error" && (
+          <div style={{background:"#f8717115",border:"1px solid #f87171",borderRadius:10,padding:14}}>
+            <p style={{color:"#f87171",margin:0,fontSize:"0.9rem",fontWeight:600}}>❌ Errore nell'analisi</p>
+            <p style={{color:"#f87171",margin:"8px 0 0",fontSize:"0.8rem",opacity:.8}}>{errorMsg}</p>
+            <p style={{fontSize:"0.75rem",opacity:.5,margin:"10px 0 0",lineHeight:1.4}}>
+              Verifica che:<br/>• La chiave API sia corretta nel file .env<br/>• Hai crediti su Anthropic<br/>• La connessione internet funzioni
+            </p>
+          </div>
+        )}
 
         {status==="done" && result && (
           <div style={{display:"flex",flexDirection:"column",gap:12}}>

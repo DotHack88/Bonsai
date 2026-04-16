@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm start",
+  "installCommand": "npm install",
+  "env": {
+    "REACT_APP_CLAUDE_API_KEY": "@claude-api-key"
+  },
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html",
+      "statusCode": 200
+    }
+  ]
+}

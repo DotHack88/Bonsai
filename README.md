@@ -48,13 +48,27 @@ Questo comando avvierà sia il client React (su `http://localhost:3000`) che il 
 
 ## 🌐 Deployment su Vercel
 
-### Opzione 1: Deploy rapido
+### Preparazione
+Prima di collegare la repository GitHub, assicurati di avere la chiave API di Claude pronta.
+
+### 1. Creare il Secret su Vercel
+1. Vai su [Vercel Dashboard](https://vercel.com/dashboard)
+2. Nella sezione "Secrets" (o "Environment Variables" se è un progetto esistente), crea un nuovo secret:
+   - **Name**: `claude_api_key`
+   - **Value**: La tua chiave API di Claude (sk-ant-xxx...)
+   - **Environment**: Production (e Development se necessario)
+
+### 2. Collegare la Repository GitHub
 ```bash
 npm install -g vercel
 vercel
 ```
+Segui le istruzioni per collegare la tua repository GitHub. Vercel rileverà automaticamente la configurazione da `vercel.json`.
 
-Il progetto include un server backend per proxy delle richieste API a Claude, configurato automaticamente per Vercel.
+### 3. Verifica il Deployment
+Dopo il deployment, l'app sarà disponibile su un URL fornito da Vercel. Il server backend gestirà automaticamente le richieste API a Claude.
+
+> **Nota**: Se ricevi errori relativi al secret mancante, assicurati di aver creato il secret `claude_api_key` prima di collegare la repository.
 ```
 
 Durante il setup, quando ti viene chiesto della variabile di ambiente, inserisci:

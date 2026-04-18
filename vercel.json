@@ -3,7 +3,7 @@
   "devCommand": "npm start",
   "installCommand": "npm install",
   "env": {
-    "REACT_APP_CLAUDE_API_KEY": "@claude-api-key"
+    "REACT_APP_CLAUDE_API_KEY": "@claude_api_key"
   },
   "redirects": [
     {

@@ -67,55 +67,8 @@ function HealthBadge({score}){
 }
 
 // ── Photo picker / camera ──────────────────────────────────────────────────────
-function PhotoInput({ onCapture, multiple = false, labels = [] }){
+function PhotoInput({ onCapture }){
   const fileRef = useRef();
-  const [photos, setPhotos] = useState([]);
-  
-  const capturePhoto = (src, name) => {
-    const newPhoto = { src, name, label: labels[photos.length] || `Foto ${photos.length + 1}` };
-    const newPhotos = [...photos, newPhoto];
-    setPhotos(newPhotos);
-    if (!multiple || newPhotos.length >= (labels.length || 3)) {
-      onCapture(multiple ? newPhotos : src, name);
-      setPhotos([]);
-    }
-  };
-
-  if (multiple && photos.length > 0) {
-    return (
-      <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(80px,1fr))",gap:8}}>
-          {photos.map((p,i)=>(
-            <div key={i} style={{position:"relative"}}>
-              <img src={p.src} alt="" style={{width:"100%",height:60,objectFit:"cover",borderRadius:8}}/>
-              <span style={{position:"absolute",bottom:2,left:2,right:2,background:"rgba(0,0,0,0.7)",color:"#fff",
-                fontSize:"0.7rem",textAlign:"center",borderRadius:4,padding:"1px 2px"}}>{p.label}</span>
-            </div>
-          ))}
-        </div>
-        {photos.length < (labels.length || 3) && (
-          <div style={{display:"flex",gap:8}}>
-            <button className="btn-outline" onClick={()=>fileRef.current.click()} style={{flex:1}}>
-              📁 Aggiungi {labels[photos.length] || `foto ${photos.length + 1}`}
-            </button>
-            <button className="btn-outline" onClick={()=>{ fileRef.current.setAttribute("capture","environment"); fileRef.current.click(); }} style={{flex:1}}>
-              📷 Scatta
-            </button>
-          </div>
-        )}
-        <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
-          onChange={e=>{
-            const f=e.target.files[0];
-            if(!f) return;
-            const r=new FileReader();
-            r.onload=ev=>capturePhoto(ev.target.result, f.name);
-            r.readAsDataURL(f);
-            fileRef.current.removeAttribute("capture");
-          }}/>
-      </div>
-    );
-  }
-
   return (
     <div style={{display:"flex",gap:8}}>
       <button className="btn-outline" onClick={()=>fileRef.current.click()} style={{flex:1}}>
@@ -138,44 +91,46 @@ function PhotoInput({ onCapture, multiple = false, labels = [] }){
 }
 
 // ── AI Analysis Modal ──────────────────────────────────────────────────────────
-function AIAnalysisModal({ images, onResult, onClose }){
+function AIAnalysisModal({ image, onResult, onClose }){
   const [status, setStatus] = useState("analyzing");
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(()=>{
-    if(!images || images.length === 0) return;
+    if(!image) return;
     
-    // Prepara le immagini per Claude
-    const content = images.map((img, i) => ({
+    // Prepara l'immagine per Claude
+    const content = [{
       type: "image",
       source: {
         type: "base64", 
-        media_type: img.src.match(/data:(image\/\w+)/)?.[1] || "image/jpeg", 
-        data: img.src.split(",")[1]
+        media_type: image.match(/data:(image\/\w+)/)?.[1] || "image/jpeg", 
+        data: image.split(",")[1]
       }
-    }));
+    }];
     
     // Aggiungi il testo di analisi
     content.push({
       type: "text", 
-      text: `Analizza queste ${images.length} foto di un bonsai. Identifica la specie botanica con la massima precisione possibile.
+      text: `Analizza questa foto di un bonsai. Rispondi in tre punti distinti: Identificazione, Check della Salute, Consigli di Cura.
 
 IMPORTANTE: 
 - Considera che si tratta di un bonsai (pianta coltivata in vaso, spesso miniaturizzata)
-- Usa tutte le foto fornite per una identificazione accurata
-- Le foto possono includere: foglie superiori, foglie inferiori, fiori/frutti, vista generale
+- Usa la foto per valutare specie, foglie, terreno e eventuale stress
+- Non aggiungere spiegazioni fuori dal JSON
 
-Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o spiegazioni:
+Rispondi SOLO con JSON valido e nulla più:
 {
   "specie": "nome scientifico esatto (es. Acer palmatum, Ficus retusa)",
   "nomeComuneIt": "nome comune italiano",
   "famiglia": "famiglia botanica (es. Aceraceae, Moraceae)",
   "origine": "regione di origine (es. Giappone, Cina, Europa)",
+  "identificazione": "Breve testo con nome comune e scientifico insieme",
+  "checkSalute": "Analisi dello stato fogliare e del terreno, segni di parassiti, carenze o stress",
+  "consigli": "Suggerimenti pratici su luce, irrigazione, rinvaso, e cura generale",
   "salute": punteggio da 0-100 basato su aspetto generale,
-  "notesSalute": "breve descrizione dello stato di salute",
-  "consigli": "2-3 consigli specifici per bonsai di questa specie",
-  "difficolta": "Facile/Media/Difficile" (difficoltà di coltivazione come bonsai),
+  "notesSalute": "Breve nota sullo stato di salute generale",
+  "difficolta": "Facile/Media/Difficile",
   "stagioneFogliazione": "quando perde/foglie (es. deciduo, sempreverde)"
 }`
     });
@@ -184,7 +139,7 @@ Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o spiegazi
       role:"user",
       content: content
     }],
-    "Sei un esperto botanico specializzato in bonsai con conoscenza enciclopedica delle specie. Identifica con precisione usando tutte le immagini fornite. Rispondi SEMPRE e SOLO in JSON valido.")
+    "Sei un esperto botanico specializzato in bonsai e analisi delle piante. Rispondi in modo preciso e strutturato, usando SOLO JSON valido senza parole inutili.")
     .then(text=>{
       console.log("Raw AI response:", text); // Debug
       try{
@@ -213,7 +168,7 @@ Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o spiegazi
       setErrorMsg(err.message || "Errore nell'analisi. Controlla la chiave API nel file .env");
       setStatus("error");
     });
-  },[images]);
+  },[image]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -223,7 +178,7 @@ Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o spiegazi
         {status==="analyzing" && (
           <div style={{textAlign:"center",padding:"32px 0"}}>
             <div className="spinner"/>
-            <p style={{marginTop:16,opacity:.7,fontSize:"0.9rem"}}>Analisi in corso con {images?.length || 0} foto…</p>
+            <p style={{marginTop:16,opacity:.7,fontSize:"0.9rem"}}>Analisi in corso con foto…</p>
           </div>
         )}
         {status==="error" && (
@@ -242,13 +197,26 @@ Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o spiegazi
             <div className="info-row"><span>🇮🇹 Nome italiano</span><strong>{result.nomeComuneIt}</strong></div>
             {result.famiglia && <div className="info-row"><span>🌿 Famiglia</span><strong>{result.famiglia}</strong></div>}
             {result.origine && <div className="info-row"><span>🏔️ Origine</span><strong>{result.origine}</strong></div>}
+            {result.identificazione && (
+              <div style={{background:"#ffffff10",borderRadius:10,padding:"10px 14px"}}>
+                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>🔎 Identificazione</strong>
+                <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.identificazione}</p>
+              </div>
+            )}
+            {result.checkSalute && (
+              <div style={{background:"#fff5cc",borderRadius:10,padding:"10px 14px"}}>
+                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>🩺 Check della Salute</strong>
+                <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.checkSalute}</p>
+              </div>
+            )}
             <div className="info-row"><span>❤️ Salute</span><HealthBadge score={result.salute}/></div>
             <div style={{background:"#ffffff10",borderRadius:10,padding:"10px 14px"}}>
               <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.notesSalute}</p>
             </div>
             {result.consigli && (
               <div style={{background:"#4ade8015",border:"1px solid #4ade8040",borderRadius:10,padding:"10px 14px"}}>
-                <p style={{fontSize:"0.82rem",margin:0,color:"#4ade80"}}>💡 {result.consigli}</p>
+                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>💡 Consigli di Cura</strong>
+                <p style={{fontSize:"0.82rem",margin:0,color:"#4ade80"}}>{result.consigli}</p>
               </div>
             )}
             {result.difficolta && <div className="info-row"><span>🎯 Difficoltà</span><strong>{result.difficolta}</strong></div>}
@@ -271,23 +239,16 @@ function BonsaiFormModal({ bonsai, onSave, onClose }){
   const isNew = !bonsai?.id;
   const [form, setForm] = useState(bonsai || {
     id: genId(), nome:"", specie:"", nomeComuneIt:"", stile:"", eta:"",
-    acquisito:"", foto:null, salute:null, notesSalute:"", note:"",
-    lavorazioni:[], createdAt: new Date().toISOString()
+    dimensione:"", macroCategoria:"", acquisito:"", foto:null,
+    salute:null, notesSalute:"", note:"", lavorazioni:[], createdAt: new Date().toISOString()
   });
-  const [photos, setPhotos] = useState([]);
+  const [currentPhoto, setCurrentPhoto] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const set = (k,v)=>setForm(f=>({...f,[k]:v}));
 
-  const photoLabels = [
-    "🌿 Foglie superiori", 
-    "🌿 Foglie inferiori", 
-    "🌸 Fiori/Frutti (se presente)", 
-    "🌳 Vista generale"
-  ];
-
-  const handlePhotoCapture = (capturedPhotos) => {
-    setPhotos(capturedPhotos);
-    setShowAI(true);
+  const handlePhotoCapture = (src, name) => {
+    setCurrentPhoto({ src, name });
+    setForm(f => ({ ...f, foto: src }));
   };
 
   return (
@@ -297,25 +258,15 @@ function BonsaiFormModal({ bonsai, onSave, onClose }){
 
         {/* Photo */}
         <div style={{marginBottom:16}}>
-          {photos.length > 0 && (
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(80px,1fr))",gap:8,marginBottom:12}}>
-              {photos.map((p,i)=>(
-                <div key={i} style={{position:"relative"}}>
-                  <img src={p.src} alt="" style={{width:"100%",height:60,objectFit:"cover",borderRadius:8}}/>
-                  <span style={{position:"absolute",bottom:2,left:2,right:2,background:"rgba(0,0,0,0.7)",color:"#fff",
-                    fontSize:"0.6rem",textAlign:"center",borderRadius:4,padding:"1px 2px"}}>{p.label}</span>
-                </div>
-              ))}
+          {currentPhoto && (
+            <div style={{marginBottom:12}}>
+              <img src={currentPhoto.src} alt="Foto bonsai" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8}}/>
             </div>
           )}
-          <PhotoInput 
-            onCapture={handlePhotoCapture} 
-            multiple={true} 
-            labels={photoLabels}
-          />
-          {photos.length > 0 && !showAI && (
+          <PhotoInput onCapture={handlePhotoCapture} />
+          {currentPhoto && !showAI && (
             <button className="btn-outline" style={{width:"100%",marginTop:8}} onClick={()=>setShowAI(true)}>
-              🤖 Ri-analizza con AI
+              🤖 Analizza con AI
             </button>
           )}
         </div>
@@ -327,6 +278,23 @@ function BonsaiFormModal({ bonsai, onSave, onClose }){
             <input className="input" placeholder="Nome comune" value={form.nomeComuneIt} onChange={e=>set("nomeComuneIt",e.target.value)}/>
             <input className="input" placeholder="Stile (Moyogi…)" value={form.stile} onChange={e=>set("stile",e.target.value)}/>
             <input className="input" placeholder="Età stimata (anni)" value={form.eta} onChange={e=>set("eta",e.target.value)} type="number"/>
+            <select className="input" value={form.macroCategoria} onChange={e=>set("macroCategoria",e.target.value)}>
+              <option value="">Macro categoria</option>
+              <option value="Conifere">Conifere</option>
+              <option value="Latifoglie">Latifoglie</option>
+              <option value="Fiore/Frutto">Fiore/Frutto</option>
+              <option value="Tropicali">Tropicali</option>
+              <option value="Altro">Altro</option>
+            </select>
+            <select className="input" value={form.dimensione} onChange={e=>set("dimensione",e.target.value)}>
+              <option value="">Dimensione</option>
+              <option value="Mame / Shito (Miniatura): Inferiore a 7-10 cm">Mame / Shito (Miniatura): Inferiore a 7-10 cm</option>
+              <option value="Shohin (Piccolo): Tra 10 e 20-25 cm">Shohin (Piccolo): Tra 10 e 20-25 cm</option>
+              <option value="Kifu (Medio-piccolo): Tra 20 e 35-40 cm">Kifu (Medio-piccolo): Tra 20 e 35-40 cm</option>
+              <option value="Chuhin / Chu (Medio): Tra 35-40 e 60-70 cm">Chuhin / Chu (Medio): Tra 35-40 e 60-70 cm</option>
+              <option value="Omono / Dai (Grande): Tra 70 e 120 cm">Omono / Dai (Grande): Tra 70 e 120 cm</option>
+              <option value="Imperial / Bonju (Molto Grande)">Imperial / Bonju (Molto Grande)</option>
+            </select>
           </div>
           <input className="input" type="date" value={form.acquisito} onChange={e=>set("acquisito",e.target.value)}
             style={{colorScheme:"dark"}} title="Data di acquisizione"/>
@@ -349,9 +317,9 @@ function BonsaiFormModal({ bonsai, onSave, onClose }){
           <button className="btn-outline" onClick={onClose}>Annulla</button>
         </div>
 
-        {showAI && photos.length > 0 && (
+        {showAI && currentPhoto && (
           <AIAnalysisModal 
-            images={photos} 
+            image={currentPhoto.src} 
             onResult={r=>{
               setForm(f=>({...f,specie:r.specie||f.specie,nomeComuneIt:r.nomeComuneIt||f.nomeComuneIt,
                 salute:r.salute,notesSalute:r.notesSalute}));
@@ -509,6 +477,8 @@ function BonsaiDetail({ bonsai, reminders, onEdit, onAddLav, onClose, onDeleteLa
           <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"8px 0 16px"}}>
             {bonsai.stile && <span className="chip">🎋 {bonsai.stile}</span>}
             {bonsai.eta  && <span className="chip">⏳ {bonsai.eta} anni</span>}
+            {bonsai.macroCategoria && <span className="chip">🌱 {bonsai.macroCategoria}</span>}
+            {bonsai.dimensione && <span className="chip">📏 {bonsai.dimensione}</span>}
             {bonsai.acquisito && <span className="chip">📅 Acq. {fmtDate(bonsai.acquisito)}</span>}
           </div>
 
@@ -1312,6 +1282,8 @@ function Tip({ icon, text }){
 export default function App(){
   const [data, setData]   = useState(loadData);
   const [tab,  setTab]    = useState("home");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategoria, setFilterCategoria] = useState("");
 
   // Modals
   const [showBonsaiForm,  setShowBonsaiForm]  = useState(false);
@@ -1492,6 +1464,20 @@ export default function App(){
                 <button className="btn-primary" onClick={()=>{ setEditingBonsai(null); setShowBonsaiForm(true); }}>+ Aggiungi</button>
               </div>
 
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:18}}>
+                <input className="input" placeholder="Cerca per nome, specie, categoria, data acquisto..." value={searchQuery}
+                  onChange={e=>setSearchQuery(e.target.value)} style={{width:"100%"}}/>
+                <select className="input" value={filterCategoria} onChange={e=>setFilterCategoria(e.target.value)}
+                  style={{width:220}}>
+                  <option value="">Tutte le macro categorie</option>
+                  <option value="Conifere">Conifere</option>
+                  <option value="Latifoglie">Latifoglie</option>
+                  <option value="Fiore/Frutto">Fiore/Frutto</option>
+                  <option value="Tropicali">Tropicali</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </div>
+
               {bonsai.length===0 && (
                 <div style={{textAlign:"center",padding:"60px 20px",opacity:.4}}>
                   <div style={{fontSize:72,marginBottom:16}}>🌱</div>
@@ -1501,7 +1487,13 @@ export default function App(){
               )}
 
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {bonsai.map(b=>{
+                {bonsai.filter(b=>{
+                  const categoryMatch = !filterCategoria || b.macroCategoria===filterCategoria;
+                  const q = searchQuery.trim().toLowerCase();
+                  if(!q) return categoryMatch;
+                  const haystack = [b.nome,b.specie,b.nomeComuneIt,b.macroCategoria,b.acquisito].map(x=>String(x||"").toLowerCase()).join(" ");
+                  return categoryMatch && haystack.includes(q);
+                }).map(b=>{
                   const nextRem = reminders.filter(r=>r.bonsaiId===b.id && !r.completato)
                     .sort((a,c)=>a.data.localeCompare(c.data))[0];
                   return (

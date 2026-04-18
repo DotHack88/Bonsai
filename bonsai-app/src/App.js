@@ -34,23 +34,16 @@ async function callClaude(messages, systemPrompt){
   if(!apiKey){
     throw new Error("Manca la chiave API di Claude. Aggiungi REACT_APP_CLAUDE_API_KEY nel file .env");
   }
-  const res = await fetch("https://api.anthropic.com/v1/messages",{
+  const res = await fetch("http://localhost:3003/api/claude",{
     method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-api-key": apiKey
-    },
+    headers:{"Content-Type":"application/json"},
     body: JSON.stringify({
-      model:"claude-sonnet-4-20250514",
+      model:"claude-3-5-sonnet-20241022",
       max_tokens:1000,
       system: systemPrompt,
       messages
     })
   });
-  if(!res.ok){
-    const err = await res.json();
-    throw new Error(err.error?.message || "Errore API Claude");
-  }
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -112,18 +105,19 @@ function AIAnalysisModal({ imageBase64, onResult, onClose }){
       role:"user",
       content:[
         { type:"image", source:{ type:"base64", media_type:mediaType, data:b64 } },
-        { type:"text", text:"Analizza questo bonsai. Rispondi SOLO con JSON valido senza backtick, nel formato: {\"specie\":\"nome specie\",\"nomeComuneIt\":\"nome comune italiano\",\"salute\":85,\"notesSalute\":\"descrizione breve stato salute\",\"consigli\":\"1-2 consigli pratici brevi\"}" }
+        { type:"text", text:"Analizza questo bonsai. Rispondi SOLO con JSON valido, senza alcun testo aggiuntivo, backtick o formattazione. Formato esatto: {\"specie\":\"nome specie\",\"nomeComuneIt\":\"nome comune italiano\",\"salute\":85,\"notesSalute\":\"descrizione breve stato salute\",\"consigli\":\"1-2 consigli pratici brevi\"}" }
       ]
     }],
-    "Sei un esperto botanico specializzato in bonsai. Analizza le immagini e fornisci: identificazione specie, stato di salute (0-100), note e consigli pratici. Rispondi SEMPRE e SOLO in JSON valido, mai con testo aggiuntivo o backtick.")
+    "Sei un esperto botanico specializzato in bonsai. Analizza le immagini e fornisci: identificazione specie, stato di salute (0-100), note e consigli pratici. IMPORTANTE: Rispondi SEMPRE e SOLO con JSON valido, senza testo aggiuntivo, backtick, o spiegazioni. Niente 'Ecco il JSON:' o simili.")
     .then(text=>{
+      console.log("Raw AI response:", text); // Debug
       try{
         const clean = text.replace(/```json|```/g,"").trim();
         const parsed = JSON.parse(clean);
         setResult(parsed);
         setStatus("done");
       } catch(e){
-        console.error("JSON parse error:", e);
+        console.error("JSON parse error:", e, "Raw text:", text);
         setResult({ specie:"Non identificata", nomeComuneIt:"Sconosciuto", salute:null, notesSalute:"Analisi non disponibile", consigli:"Riprova con una foto più nitida." });
         setStatus("done");
       }
@@ -371,7 +365,7 @@ function ReminderModal({ bonsaiList, reminder, onSave, onClose }){
 }
 
 // ── Bonsai Detail Panel ────────────────────────────────────────────────────────
-function BonsaiDetail({ bonsai, reminders, onEdit, onAddLav, onClose, onDeleteLav }){
+function BonsaiDetail({ bonsai, reminders, onEdit, onAddLav, onClose, onDeleteLav, onDeleteBonsai }){
   const myReminders = reminders.filter(r=>r.bonsaiId===bonsai.id && !r.completato)
     .sort((a,b)=>a.data.localeCompare(b.data));
   const lavorazioni = [...(bonsai.lavorazioni||[])].sort((a,b)=>b.data.localeCompare(a.data));
@@ -458,6 +452,13 @@ function BonsaiDetail({ bonsai, reminders, onEdit, onAddLav, onClose, onDeleteLa
           <div style={{display:"flex",gap:8}}>
             <button className="btn-primary" style={{flex:1}} onClick={onAddLav}>🌿 Aggiungi Lavorazione</button>
             <button className="btn-outline" onClick={onEdit}>✏️ Modifica</button>
+          </div>
+          <div style={{marginTop:12}}>
+            <button className="btn-outline" style={{width:"100%",color:"#f87171",borderColor:"#f87171"}} onClick={()=>{
+              if(window.confirm(`Sei sicuro di voler cancellare "${bonsai.nome||bonsai.specie||'questo bonsai'}"? Verranno cancellati anche tutti i promemoria e le lavorazioni associate.`)){
+                onDeleteBonsai(bonsai.id);
+              }
+            }}>🗑️ Cancella Bonsai</button>
           </div>
         </div>
       </div>
@@ -1397,6 +1398,13 @@ export default function App(){
                           ? <img src={b.foto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                           : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontSize:48,opacity:.3}}>🌳</div>
                         }
+                        <button onClick={(e)=>{
+                          e.stopPropagation();
+                          if(window.confirm(`Sei sicuro di voler cancellare "${b.nome||b.specie||'questo bonsai'}"? Verranno cancellati anche tutti i promemoria associati.`)){
+                            deleteBonsai(b.id);
+                          }
+                        }} style={{position:"absolute",top:8,left:8,background:"#f87171",border:"none",color:"#fff",
+                          width:24,height:24,borderRadius:"50%",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
                         {b.salute!=null && (
                           <div style={{position:"absolute",top:8,right:8}}>
                             <HealthBadge score={b.salute}/>
@@ -1503,6 +1511,7 @@ export default function App(){
             onAddLav={()=>setShowLavModal(true)}
             onClose={()=>setDetailBonsai(null)}
             onDeleteLav={(bId,lId)=>{ deleteLavorazione(bId,lId); setDetailBonsai(d=>({...d,lavorazioni:(d.lavorazioni||[]).filter(l=>l.id!==lId)})); }}
+            onDeleteBonsai={deleteBonsai}
           />
         )}
 

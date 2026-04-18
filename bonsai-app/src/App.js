@@ -157,9 +157,13 @@ Rispondi SOLO con JSON valido e nulla più:
           nomeComuneIt:"Sconosciuto", 
           famiglia:"",
           origine:"",
+          macroCategoria:"",
+          dimensione:"",
+          identificazione:"Non disponibile",
+          checkSalute:"Analisi non disponibile",
+          consigli:"Riprova con foto più nitide da angolazioni diverse",
           salute:null, 
           notesSalute:"Analisi non disponibile - riprova con foto più chiare", 
-          consigli:"Riprova con foto più nitide da angolazioni diverse",
           difficolta:"",
           stagioneFogliazione:""
         });

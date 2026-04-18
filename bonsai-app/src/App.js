@@ -117,6 +117,7 @@ function AIAnalysisModal({ image, onResult, onClose }){
 IMPORTANTE: 
 - Considera che si tratta di un bonsai (pianta coltivata in vaso, spesso miniaturizzata)
 - Usa la foto per valutare specie, foglie, terreno e eventuale stress
+- Determina anche la macro categoria e la dimensione del bonsai, se possibile
 - Non aggiungere spiegazioni fuori dal JSON
 
 Rispondi SOLO con JSON valido e nulla più:
@@ -125,6 +126,8 @@ Rispondi SOLO con JSON valido e nulla più:
   "nomeComuneIt": "nome comune italiano",
   "famiglia": "famiglia botanica (es. Aceraceae, Moraceae)",
   "origine": "regione di origine (es. Giappone, Cina, Europa)",
+  "macroCategoria": "Conifere, Latifoglie, Fiore/Frutto, Tropicali o Altro",
+  "dimensione": "Mame / Shito (Miniatura), Shohin (Piccolo), Kifu (Medio-piccolo), Chuhin / Chu (Medio), Omono / Dai (Grande), Imperial / Bonju (Molto Grande)",
   "identificazione": "Breve testo con nome comune e scientifico insieme",
   "checkSalute": "Analisi dello stato fogliare e del terreno, segni di parassiti, carenze o stress",
   "consigli": "Suggerimenti pratici su luce, irrigazione, rinvaso, e cura generale",
@@ -197,6 +200,8 @@ Rispondi SOLO con JSON valido e nulla più:
             <div className="info-row"><span>🇮🇹 Nome italiano</span><strong>{result.nomeComuneIt}</strong></div>
             {result.famiglia && <div className="info-row"><span>🌿 Famiglia</span><strong>{result.famiglia}</strong></div>}
             {result.origine && <div className="info-row"><span>🏔️ Origine</span><strong>{result.origine}</strong></div>}
+            {result.macroCategoria && <div className="info-row"><span>🌱 Categoria</span><strong>{result.macroCategoria}</strong></div>}
+            {result.dimensione && <div className="info-row"><span>📏 Dimensione</span><strong>{result.dimensione}</strong></div>}
             {result.identificazione && (
               <div style={{background:"#ffffff10",borderRadius:10,padding:"10px 14px"}}>
                 <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>🔎 Identificazione</strong>
@@ -321,8 +326,15 @@ function BonsaiFormModal({ bonsai, onSave, onClose }){
           <AIAnalysisModal 
             image={currentPhoto.src} 
             onResult={r=>{
-              setForm(f=>({...f,specie:r.specie||f.specie,nomeComuneIt:r.nomeComuneIt||f.nomeComuneIt,
-                salute:r.salute,notesSalute:r.notesSalute}));
+              setForm(f=>({
+                ...f,
+                specie:r.specie||f.specie,
+                nomeComuneIt:r.nomeComuneIt||f.nomeComuneIt,
+                macroCategoria:r.macroCategoria||f.macroCategoria,
+                dimensione:r.dimensione||f.dimensione,
+                salute:r.salute,
+                notesSalute:r.notesSalute
+              }));
               setShowAI(false);
             }}
             onClose={()=>setShowAI(false)}/>

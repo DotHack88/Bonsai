@@ -34,7 +34,7 @@ async function callClaude(messages, systemPrompt){
   if(!apiKey){
     throw new Error("Manca la chiave API di Claude. Aggiungi REACT_APP_CLAUDE_API_KEY nel file .env");
   }
-  const res = await fetch("http://localhost:3003/api/claude",{
+  const res = await fetch("http://localhost:3004/api/claude",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body: JSON.stringify({

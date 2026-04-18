@@ -21,7 +21,7 @@ Una completa app web per la gestione della tua collezione di bonsai con AI-power
 
 ### 1. Installazione
 ```bash
-cd bonsai-app
+cd Bonsai
 npm install
 ```
 
@@ -37,10 +37,14 @@ REACT_APP_CLAUDE_API_KEY=sk-ant-xxx...
 
 ### 3. Avviare in sviluppo
 ```bash
-npm start
+npm run dev
 ```
 
-L'app si aprirà su `http://localhost:3000`
+Questo comando avvierà sia il client React (su `http://localhost:3000`) che il server backend (su `http://localhost:3004`).
+
+> In alternativa, puoi avviare client e server separatamente:
+> - Client: `npm start`
+> - Server: `npm run server`
 
 ## 🌐 Deployment su Vercel
 
@@ -48,6 +52,9 @@ L'app si aprirà su `http://localhost:3000`
 ```bash
 npm install -g vercel
 vercel
+```
+
+Il progetto include un server backend per proxy delle richieste API a Claude, configurato automaticamente per Vercel.
 ```
 
 Durante il setup, quando ti viene chiesto della variabile di ambiente, inserisci:

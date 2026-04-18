@@ -1,4 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
+import BonsaiForm from "./components/BonsaiForm";
+import BonsaiCard from "./components/BonsaiCard";
+import FilterBar from "./components/FilterBar";
+import { WORK_ICONS } from "./data/bonsaiOptions";
+import { callClaude, HealthBadge } from "./components/shared";
 
 // ── Palette & helpers ──────────────────────────────────────────────────────────
 const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
@@ -13,11 +18,6 @@ function daysFromNow(dateStr){
   return Math.ceil(diff/(1000*60*60*24));
 }
 
-const WORK_ICONS = {
-  "Concimazione":"🌿","Potatura":"✂️","Rinvaso":"🪴","Irrigazione":"💧",
-  "Antiparassitario":"🐛","Fil di ferro":"🔩","Defogliazione":"🍃","Osservazione":"👁️","Altro":"📝"
-};
-
 // ── Storage helpers ────────────────────────────────────────────────────────────
 const STORAGE_KEY = "bonsai_app_v2";
 function loadData(){
@@ -27,326 +27,6 @@ function loadData(){
 function saveData(d){ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
 function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
-
-// ── AI call helper ─────────────────────────────────────────────────────────────
-async function callClaude(messages, systemPrompt){
-  const apiKey = process.env.REACT_APP_CLAUDE_API_KEY;
-  if(!apiKey){
-    throw new Error("Manca la chiave API di Claude. Aggiungi REACT_APP_CLAUDE_API_KEY nel file .env");
-  }
-  const res = await fetch("http://localhost:3004/api/claude",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      model:"claude-3-5-sonnet-20241022",
-      max_tokens:1000,
-      system: systemPrompt,
-      messages
-    })
-  });
-  const data = await res.json();
-  return data.content?.[0]?.text || "";
-}
-
-// ── Health badge ───────────────────────────────────────────────────────────────
-function HealthBadge({score}){
-  if(score==null) return null;
-  const s = parseInt(score);
-  const color = s>=80?"#4ade80":s>=50?"#facc15":"#f87171";
-  const label = s>=80?"Ottima":s>=50?"Discreta":"Attenzione";
-  return (
-    <span style={{
-      background:color+"22",border:`1px solid ${color}`,color,
-      fontSize:"0.7rem",fontWeight:700,padding:"2px 8px",borderRadius:20,
-      display:"inline-flex",alignItems:"center",gap:4
-    }}>
-      <span style={{width:6,height:6,borderRadius:"50%",background:color,display:"inline-block"}}/>
-      {label} {s}%
-    </span>
-  );
-}
-
-// ── Photo picker / camera ──────────────────────────────────────────────────────
-function PhotoInput({ onCapture }){
-  const fileRef = useRef();
-  return (
-    <div style={{display:"flex",gap:8}}>
-      <button className="btn-outline" onClick={()=>fileRef.current.click()} style={{flex:1}}>
-        📁 Galleria
-      </button>
-      <button className="btn-outline" onClick={()=>{ fileRef.current.setAttribute("capture","environment"); fileRef.current.click(); }} style={{flex:1}}>
-        📷 Scatta
-      </button>
-      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
-        onChange={e=>{
-          const f=e.target.files[0];
-          if(!f) return;
-          const r=new FileReader();
-          r.onload=ev=>onCapture(ev.target.result, f.name);
-          r.readAsDataURL(f);
-          fileRef.current.removeAttribute("capture");
-        }}/>
-    </div>
-  );
-}
-
-// ── AI Analysis Modal ──────────────────────────────────────────────────────────
-function AIAnalysisModal({ image, onResult, onClose }){
-  const [status, setStatus] = useState("analyzing");
-  const [result, setResult] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-
-  useEffect(()=>{
-    if(!image) return;
-    
-    // Prepara l'immagine per Claude
-    const content = [{
-      type: "image",
-      source: {
-        type: "base64", 
-        media_type: image.match(/data:(image\/\w+)/)?.[1] || "image/jpeg", 
-        data: image.split(",")[1]
-      }
-    }];
-    
-    // Aggiungi il testo di analisi
-    content.push({
-      type: "text", 
-      text: `Analizza questa foto di un bonsai. Rispondi in tre punti distinti: Identificazione, Check della Salute, Consigli di Cura.
-
-IMPORTANTE: 
-- Considera che si tratta di un bonsai (pianta coltivata in vaso, spesso miniaturizzata)
-- Usa la foto per valutare specie, foglie, terreno e eventuale stress
-- Determina anche la macro categoria e la dimensione del bonsai, se possibile
-- Non aggiungere spiegazioni fuori dal JSON
-
-Rispondi SOLO con JSON valido e nulla più:
-{
-  "specie": "nome scientifico esatto (es. Acer palmatum, Ficus retusa)",
-  "nomeComuneIt": "nome comune italiano",
-  "famiglia": "famiglia botanica (es. Aceraceae, Moraceae)",
-  "origine": "regione di origine (es. Giappone, Cina, Europa)",
-  "macroCategoria": "Conifere, Latifoglie, Fiore/Frutto, Tropicali o Altro",
-  "dimensione": "Mame / Shito (Miniatura), Shohin (Piccolo), Kifu (Medio-piccolo), Chuhin / Chu (Medio), Omono / Dai (Grande), Imperial / Bonju (Molto Grande)",
-  "identificazione": "Breve testo con nome comune e scientifico insieme",
-  "checkSalute": "Analisi dello stato fogliare e del terreno, segni di parassiti, carenze o stress",
-  "consigli": "Suggerimenti pratici su luce, irrigazione, rinvaso, e cura generale",
-  "salute": punteggio da 0-100 basato su aspetto generale,
-  "notesSalute": "Breve nota sullo stato di salute generale",
-  "difficolta": "Facile/Media/Difficile",
-  "stagioneFogliazione": "quando perde/foglie (es. deciduo, sempreverde)"
-}`
-    });
-
-    callClaude([{
-      role:"user",
-      content: content
-    }],
-    "Sei un esperto botanico specializzato in bonsai e analisi delle piante. Rispondi in modo preciso e strutturato, usando SOLO JSON valido senza parole inutili.")
-    .then(text=>{
-      console.log("Raw AI response:", text); // Debug
-      try{
-        const clean = text.replace(/```json|```/g,"").trim();
-        const parsed = JSON.parse(clean);
-        setResult(parsed);
-        setStatus("done");
-      } catch(e){
-        console.error("JSON parse error:", e, "Raw text:", text);
-        setResult({ 
-          specie:"Non identificata", 
-          nomeComuneIt:"Sconosciuto", 
-          famiglia:"",
-          origine:"",
-          macroCategoria:"",
-          dimensione:"",
-          identificazione:"Non disponibile",
-          checkSalute:"Analisi non disponibile",
-          consigli:"Riprova con foto più nitide da angolazioni diverse",
-          salute:null, 
-          notesSalute:"Analisi non disponibile - riprova con foto più chiare", 
-          difficolta:"",
-          stagioneFogliazione:""
-        });
-        setStatus("done");
-      }
-    })
-    .catch(err=>{
-      console.error("AI Analysis Error:", err);
-      setErrorMsg(err.message || "Errore nell'analisi. Controlla la chiave API nel file .env");
-      setStatus("error");
-    });
-  },[image]);
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{maxWidth:380}}>
-        <h3 style={{marginBottom:16,fontSize:"1.1rem"}}>🤖 Analisi AI Bonsai</h3>
-
-        {status==="analyzing" && (
-          <div style={{textAlign:"center",padding:"32px 0"}}>
-            <div className="spinner"/>
-            <p style={{marginTop:16,opacity:.7,fontSize:"0.9rem"}}>Analisi in corso con foto…</p>
-          </div>
-        )}
-        {status==="error" && (
-          <div style={{background:"#f8717115",border:"1px solid #f87171",borderRadius:10,padding:14}}>
-            <p style={{color:"#f87171",margin:0,fontSize:"0.9rem",fontWeight:600}}>❌ Errore nell'analisi</p>
-            <p style={{color:"#f87171",margin:"8px 0 0",fontSize:"0.8rem",opacity:.8}}>{errorMsg}</p>
-            <p style={{fontSize:"0.75rem",opacity:.5,margin:"10px 0 0",lineHeight:1.4}}>
-              Verifica che:<br/>• La chiave API sia corretta nel file .env<br/>• Hai crediti su Anthropic<br/>• La connessione internet funzioni
-            </p>
-          </div>
-        )}
-
-        {status==="done" && result && (
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <div className="info-row"><span>🌳 Specie</span><strong>{result.specie}</strong></div>
-            <div className="info-row"><span>🇮🇹 Nome italiano</span><strong>{result.nomeComuneIt}</strong></div>
-            {result.famiglia && <div className="info-row"><span>🌿 Famiglia</span><strong>{result.famiglia}</strong></div>}
-            {result.origine && <div className="info-row"><span>🏔️ Origine</span><strong>{result.origine}</strong></div>}
-            {result.macroCategoria && <div className="info-row"><span>🌱 Categoria</span><strong>{result.macroCategoria}</strong></div>}
-            {result.dimensione && <div className="info-row"><span>📏 Dimensione</span><strong>{result.dimensione}</strong></div>}
-            {result.identificazione && (
-              <div style={{background:"#ffffff10",borderRadius:10,padding:"10px 14px"}}>
-                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>🔎 Identificazione</strong>
-                <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.identificazione}</p>
-              </div>
-            )}
-            {result.checkSalute && (
-              <div style={{background:"#fff5cc",borderRadius:10,padding:"10px 14px"}}>
-                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>🩺 Check della Salute</strong>
-                <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.checkSalute}</p>
-              </div>
-            )}
-            <div className="info-row"><span>❤️ Salute</span><HealthBadge score={result.salute}/></div>
-            <div style={{background:"#ffffff10",borderRadius:10,padding:"10px 14px"}}>
-              <p style={{fontSize:"0.82rem",margin:0,opacity:.85}}>{result.notesSalute}</p>
-            </div>
-            {result.consigli && (
-              <div style={{background:"#4ade8015",border:"1px solid #4ade8040",borderRadius:10,padding:"10px 14px"}}>
-                <strong style={{display:"block",marginBottom:6,fontSize:"0.88rem"}}>💡 Consigli di Cura</strong>
-                <p style={{fontSize:"0.82rem",margin:0,color:"#4ade80"}}>{result.consigli}</p>
-              </div>
-            )}
-            {result.difficolta && <div className="info-row"><span>🎯 Difficoltà</span><strong>{result.difficolta}</strong></div>}
-            {result.stagioneFogliazione && <div className="info-row"><span>🍂 Fogliazione</span><strong>{result.stagioneFogliazione}</strong></div>}
-            <div style={{display:"flex",gap:8,marginTop:8}}>
-              <button className="btn-primary" style={{flex:1}} onClick={()=>onResult(result)}>
-                ✅ Usa questi dati
-              </button>
-              <button className="btn-outline" onClick={onClose}>Annulla</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Bonsai Form Modal ──────────────────────────────────────────────────────────
-function BonsaiFormModal({ bonsai, onSave, onClose }){
-  const isNew = !bonsai?.id;
-  const [form, setForm] = useState(bonsai || {
-    id: genId(), nome:"", specie:"", nomeComuneIt:"", stile:"", eta:"",
-    dimensione:"", macroCategoria:"", acquisito:"", foto:null,
-    salute:null, notesSalute:"", note:"", lavorazioni:[], createdAt: new Date().toISOString()
-  });
-  const [currentPhoto, setCurrentPhoto] = useState(null);
-  const [showAI, setShowAI] = useState(false);
-  const set = (k,v)=>setForm(f=>({...f,[k]:v}));
-
-  const handlePhotoCapture = (src, name) => {
-    setCurrentPhoto({ src, name });
-    setForm(f => ({ ...f, foto: src }));
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
-        <h3 style={{marginBottom:16}}>{isNew?"🌱 Nuovo Bonsai":"✏️ Modifica Bonsai"}</h3>
-
-        {/* Photo */}
-        <div style={{marginBottom:16}}>
-          {currentPhoto && (
-            <div style={{marginBottom:12}}>
-              <img src={currentPhoto.src} alt="Foto bonsai" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8}}/>
-            </div>
-          )}
-          <PhotoInput onCapture={handlePhotoCapture} />
-          {currentPhoto && !showAI && (
-            <button className="btn-outline" style={{width:"100%",marginTop:8}} onClick={()=>setShowAI(true)}>
-              🤖 Analizza con AI
-            </button>
-          )}
-        </div>
-
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <input className="input" placeholder="Nome (es. Il mio primo ficus)" value={form.nome} onChange={e=>set("nome",e.target.value)}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <input className="input" placeholder="Specie" value={form.specie} onChange={e=>set("specie",e.target.value)}/>
-            <input className="input" placeholder="Nome comune" value={form.nomeComuneIt} onChange={e=>set("nomeComuneIt",e.target.value)}/>
-            <input className="input" placeholder="Stile (Moyogi…)" value={form.stile} onChange={e=>set("stile",e.target.value)}/>
-            <input className="input" placeholder="Età stimata (anni)" value={form.eta} onChange={e=>set("eta",e.target.value)} type="number"/>
-            <select className="input" value={form.macroCategoria} onChange={e=>set("macroCategoria",e.target.value)}>
-              <option value="">Macro categoria</option>
-              <option value="Conifere">Conifere</option>
-              <option value="Latifoglie">Latifoglie</option>
-              <option value="Fiore/Frutto">Fiore/Frutto</option>
-              <option value="Tropicali">Tropicali</option>
-              <option value="Altro">Altro</option>
-            </select>
-            <select className="input" value={form.dimensione} onChange={e=>set("dimensione",e.target.value)}>
-              <option value="">Dimensione</option>
-              <option value="Mame / Shito (Miniatura): Inferiore a 7-10 cm">Mame / Shito (Miniatura): Inferiore a 7-10 cm</option>
-              <option value="Shohin (Piccolo): Tra 10 e 20-25 cm">Shohin (Piccolo): Tra 10 e 20-25 cm</option>
-              <option value="Kifu (Medio-piccolo): Tra 20 e 35-40 cm">Kifu (Medio-piccolo): Tra 20 e 35-40 cm</option>
-              <option value="Chuhin / Chu (Medio): Tra 35-40 e 60-70 cm">Chuhin / Chu (Medio): Tra 35-40 e 60-70 cm</option>
-              <option value="Omono / Dai (Grande): Tra 70 e 120 cm">Omono / Dai (Grande): Tra 70 e 120 cm</option>
-              <option value="Imperial / Bonju (Molto Grande)">Imperial / Bonju (Molto Grande)</option>
-            </select>
-          </div>
-          <input className="input" type="date" value={form.acquisito} onChange={e=>set("acquisito",e.target.value)}
-            style={{colorScheme:"dark"}} title="Data di acquisizione"/>
-          <textarea className="input" placeholder="Note generali…" value={form.note} rows={2}
-            onChange={e=>set("note",e.target.value)} style={{resize:"vertical"}}/>
-        </div>
-
-        {form.salute!=null && (
-          <div style={{marginTop:12,background:"#ffffff08",borderRadius:10,padding:"10px 14px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:"0.8rem",opacity:.7}}>Salute rilevata AI</span>
-              <HealthBadge score={form.salute}/>
-            </div>
-            {form.notesSalute && <p style={{fontSize:"0.78rem",margin:"6px 0 0",opacity:.7}}>{form.notesSalute}</p>}
-          </div>
-        )}
-
-        <div style={{display:"flex",gap:8,marginTop:18}}>
-          <button className="btn-primary" style={{flex:1}} onClick={()=>onSave(form)}>💾 Salva</button>
-          <button className="btn-outline" onClick={onClose}>Annulla</button>
-        </div>
-
-        {showAI && currentPhoto && (
-          <AIAnalysisModal 
-            image={currentPhoto.src} 
-            onResult={r=>{
-              setForm(f=>({
-                ...f,
-                specie:r.specie||f.specie,
-                nomeComuneIt:r.nomeComuneIt||f.nomeComuneIt,
-                macroCategoria:r.macroCategoria||f.macroCategoria,
-                dimensione:r.dimensione||f.dimensione,
-                salute:r.salute,
-                notesSalute:r.notesSalute
-              }));
-              setShowAI(false);
-            }}
-            onClose={()=>setShowAI(false)}/>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Lavorazione Modal ──────────────────────────────────────────────────────────
 function LavorazioneModal({ bonsaiId, bonsaiNome, onSave, onClose }){
@@ -968,7 +648,7 @@ function StatsView({ bonsai, reminders }){
             <div style={{background:"var(--surface2)",borderRadius:14,padding:"16px",marginBottom:16,
               display:"flex",gap:14,alignItems:"center"}}>
               {mostActive.foto
-                ? <img src={mostActive.foto} style={{width:56,height:56,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+                ? <img src={mostActive.foto} alt="Foto del bonsai più attivo" style={{width:56,height:56,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
                 : <div style={{width:56,height:56,borderRadius:10,background:"#1a2010",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>🌳</div>
               }
               <div>
@@ -990,7 +670,7 @@ function StatsView({ bonsai, reminders }){
                 <div key={b.id} style={{display:"flex",alignItems:"center",gap:12,
                   padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
                   {b.foto
-                    ? <img src={b.foto} style={{width:40,height:40,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                    ? <img src={b.foto} alt={`Foto del bonsai ${b.nome||b.specie||"Bonsai"}`} style={{width:40,height:40,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
                     : <div style={{width:40,height:40,borderRadius:8,background:"#1a2010",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🌳</div>
                   }
                   <div style={{flex:1,minWidth:0}}>
@@ -1237,7 +917,7 @@ Rispondi in italiano, sii diretto e pratico. Formato: lista con emoji per ogni p
                       if(selBonsai!==b.id) getAIAdvice(b);
                     }}>
                     {b.foto
-                      ? <img src={b.foto} style={{width:44,height:44,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
+                      ? <img src={b.foto} alt={`Foto del bonsai ${b.nome||b.specie||"Bonsai"}`} style={{width:44,height:44,borderRadius:10,objectFit:"cover",flexShrink:0}}/>
                       : <div style={{width:44,height:44,borderRadius:10,background:"#1a2010",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🌳</div>
                     }
                     <div style={{flex:1,minWidth:0}}>
@@ -1300,6 +980,9 @@ export default function App(){
   const [tab,  setTab]    = useState("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategoria, setFilterCategoria] = useState("");
+  const [filterStile, setFilterStile] = useState("");
+  const [filterDimensione, setFilterDimensione] = useState("");
+  const [filterSalute, setFilterSalute] = useState("");
 
   // Modals
   const [showBonsaiForm,  setShowBonsaiForm]  = useState(false);
@@ -1314,6 +997,21 @@ export default function App(){
   useEffect(()=>saveData(data),[data]);
 
   const { bonsai, reminders } = data;
+
+  const filteredBonsai = bonsai.filter(b => {
+    const categoryMatch = !filterCategoria || b.macroCategoria === filterCategoria;
+    const styleMatch = !filterStile || b.stile === filterStile;
+    const sizeMatch = !filterDimensione || b.dimensione === filterDimensione;
+    const healthMatch = !filterSalute || (
+      filterSalute === "high" ? b.salute >= 80 :
+      filterSalute === "medium" ? b.salute >= 50 && b.salute < 80 :
+      filterSalute === "low" ? b.salute != null && b.salute < 50 : true
+    );
+    const q = searchQuery.trim().toLowerCase();
+    const haystack = [b.nome, b.specie, b.nomeComuneIt, b.macroCategoria, b.dimensione, b.stile, b.acquisito]
+      .map(x => String(x || "").toLowerCase()).join(" ");
+    return categoryMatch && styleMatch && sizeMatch && healthMatch && (!q || haystack.includes(q));
+  });
 
   // ── CRUD helpers ──
   const saveBonsai = (b)=>{
@@ -1480,71 +1178,52 @@ export default function App(){
                 <button className="btn-primary" onClick={()=>{ setEditingBonsai(null); setShowBonsaiForm(true); }}>+ Aggiungi</button>
               </div>
 
-              <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:18}}>
-                <input className="input" placeholder="Cerca per nome, specie, categoria, data acquisto..." value={searchQuery}
-                  onChange={e=>setSearchQuery(e.target.value)} style={{width:"100%"}}/>
-                <select className="input" value={filterCategoria} onChange={e=>setFilterCategoria(e.target.value)}
-                  style={{width:220}}>
-                  <option value="">Tutte le macro categorie</option>
-                  <option value="Conifere">Conifere</option>
-                  <option value="Latifoglie">Latifoglie</option>
-                  <option value="Fiore/Frutto">Fiore/Frutto</option>
-                  <option value="Tropicali">Tropicali</option>
-                  <option value="Altro">Altro</option>
-                </select>
-              </div>
+              <FilterBar
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                filterCategoria={filterCategoria}
+                setFilterCategoria={setFilterCategoria}
+                filterStile={filterStile}
+                setFilterStile={setFilterStile}
+                filterDimensione={filterDimensione}
+                setFilterDimensione={setFilterDimensione}
+                filterSalute={filterSalute}
+                setFilterSalute={setFilterSalute}
+              />
 
-              {bonsai.length===0 && (
+              {bonsai.length === 0 ? (
                 <div style={{textAlign:"center",padding:"60px 20px",opacity:.4}}>
                   <div style={{fontSize:72,marginBottom:16}}>🌱</div>
                   <p style={{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem"}}>Aggiungi il tuo primo bonsai</p>
                   <p style={{fontSize:".82rem",marginTop:8}}>Scatta una foto e lascia che l'AI identifichi la specie</p>
                 </div>
-              )}
-
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {bonsai.filter(b=>{
-                  const categoryMatch = !filterCategoria || b.macroCategoria===filterCategoria;
-                  const q = searchQuery.trim().toLowerCase();
-                  if(!q) return categoryMatch;
-                  const haystack = [b.nome,b.specie,b.nomeComuneIt,b.macroCategoria,b.acquisito].map(x=>String(x||"").toLowerCase()).join(" ");
-                  return categoryMatch && haystack.includes(q);
-                }).map(b=>{
-                  const nextRem = reminders.filter(r=>r.bonsaiId===b.id && !r.completato)
-                    .sort((a,c)=>a.data.localeCompare(c.data))[0];
-                  return (
-                    <div key={b.id} className="bonsai-card" onClick={()=>setDetailBonsai(b)}>
-                      <div style={{height:140,background:"#1a2010",position:"relative"}}>
-                        {b.foto
-                          ? <img src={b.foto} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                          : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontSize:48,opacity:.3}}>🌳</div>
-                        }
-                        <button onClick={(e)=>{
-                          e.stopPropagation();
-                          if(window.confirm(`Sei sicuro di voler cancellare "${b.nome||b.specie||'questo bonsai'}"? Verranno cancellati anche tutti i promemoria associati.`)){
-                            deleteBonsai(b.id);
+              ) : filteredBonsai.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", opacity: .5 }}>
+                  <p style={{ margin: 0, fontSize: "1rem" }}>Nessun bonsai corrisponde ai filtri selezionati.</p>
+                  <p style={{ margin: "8px 0 0", fontSize: ".82rem", opacity: .6 }}>Prova a resettare il filtro o usa la ricerca.</p>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {filteredBonsai.map(b => {
+                    const nextRem = reminders
+                      .filter(r => r.bonsaiId === b.id && !r.completato)
+                      .sort((a, c) => a.data.localeCompare(c.data))[0];
+                    return (
+                      <BonsaiCard
+                        key={b.id}
+                        bonsai={b}
+                        nextRem={nextRem}
+                        onSelect={() => setDetailBonsai(b)}
+                        onDelete={id => {
+                          if (window.confirm(`Sei sicuro di voler cancellare "${b.nome || b.specie || 'questo bonsai'}"? Verranno cancellati anche tutti i promemoria associati.`)) {
+                            deleteBonsai(id);
                           }
-                        }} style={{position:"absolute",top:8,left:8,background:"#f87171",border:"none",color:"#fff",
-                          width:24,height:24,borderRadius:"50%",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-                        {b.salute!=null && (
-                          <div style={{position:"absolute",top:8,right:8}}>
-                            <HealthBadge score={b.salute}/>
-                          </div>
-                        )}
-                      </div>
-                      <div style={{padding:"10px 12px"}}>
-                        <p style={{fontWeight:600,fontSize:".88rem",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.nome||b.specie||"Bonsai"}</p>
-                        <p style={{fontSize:".75rem",opacity:.5,margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.specie||b.nomeComuneIt||"—"}</p>
-                        {nextRem && (
-                          <p style={{fontSize:".7rem",marginTop:6,color:"var(--moss)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {WORK_ICONS[nextRem.tipo]} {nextRem.nota||nextRem.tipo}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Upcoming reminders strip */}
               {urgentCount>0 && (
@@ -1618,7 +1297,7 @@ export default function App(){
 
         {/* ─── MODALS ─── */}
         {showBonsaiForm && (
-          <BonsaiFormModal
+          <BonsaiForm
             bonsai={editingBonsai}
             onSave={saveBonsai}
             onClose={()=>{ setShowBonsaiForm(false); setEditingBonsai(null); }}/>

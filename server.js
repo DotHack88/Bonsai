@@ -8,7 +8,8 @@ app.use(express.json({ limit: '10mb' })); // Per gestire immagini base64 grandi
 
 app.post('/api/claude', async (req, res) => {
   try {
-    const apiKey = process.env.REACT_APP_CLAUDE_API_KEY;
+    // CLAUDE_API_KEY (senza prefisso REACT_APP_) rimane solo server-side
+    const apiKey = process.env.CLAUDE_API_KEY;
     if (!apiKey) {
       console.log('No API key found');
       return res.status(500).json({ error: { message: 'Chiave API mancante' } });

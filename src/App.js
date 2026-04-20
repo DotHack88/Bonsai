@@ -8,7 +8,7 @@ import { callClaude, HealthBadge } from "./components/shared";
 // ── Palette & helpers ──────────────────────────────────────────────────────────
 const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 const DAYS   = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
-const TODAY  = new Date();
+function getToday(){ return new Date(); }
 
 function pad(n){ return String(n).padStart(2,"0"); }
 function fmtDate(d){ if(!d) return ""; const dt=new Date(d); return `${pad(dt.getDate())} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`; }
@@ -247,7 +247,7 @@ function BonsaiDetail({ bonsai, reminders, onEdit, onAddLav, onClose, onDeleteLa
 
 // ── Mini Calendar ──────────────────────────────────────────────────────────────
 function CalendarView({ reminders, bonsaiList, onAddReminder, onEditReminder, onToggleReminder }){
-  const [cur, setCur] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(),1));
+  const [cur, setCur] = useState(() => { const t = getToday(); return new Date(t.getFullYear(), t.getMonth(), 1); });
 
   const daysInMonth = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
   const firstDay    = new Date(cur.getFullYear(), cur.getMonth(), 1).getDay();
@@ -267,8 +267,9 @@ function CalendarView({ reminders, bonsaiList, onAddReminder, onEditReminder, on
 
   const [selDay, setSelDay] = useState(null);
 
-  const today = TODAY.getDate();
-  const isThisMonth = cur.getMonth()===TODAY.getMonth() && cur.getFullYear()===TODAY.getFullYear();
+  const _today = getToday();
+  const today = _today.getDate();
+  const isThisMonth = cur.getMonth()===_today.getMonth() && cur.getFullYear()===_today.getFullYear();
 
   return (
     <div>
@@ -412,8 +413,9 @@ function RemindersView({ reminders, bonsaiList, onAdd, onEdit, onToggle, onDelet
 // ── Stats helpers ──────────────────────────────────────────────────────────────
 function getMonthlyCounts(allLavorazioni, months=6){
   const result = [];
+  const _ref = getToday();
   for(let i=months-1;i>=0;i--){
-    const d = new Date(TODAY.getFullYear(), TODAY.getMonth()-i, 1);
+    const d = new Date(_ref.getFullYear(), _ref.getMonth()-i, 1);
     const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
     const count = allLavorazioni.filter(l=> l.data && l.data.startsWith(key)).length;
     result.push({ label: MONTHS[d.getMonth()], key, count });
@@ -714,7 +716,7 @@ const WMO_DESC = {
 };
 
 function getStagione(){
-  const m = TODAY.getMonth();
+  const m = getToday().getMonth();
   if(m>=2&&m<=4) return "Primavera";
   if(m>=5&&m<=7) return "Estate";
   if(m>=8&&m<=10) return "Autunno";

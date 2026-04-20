@@ -1,12 +1,36 @@
 import { useRef } from "react";
 
-export async function callClaude(messages, systemPrompt) {
-  const apiKey = process.env.REACT_APP_CLAUDE_API_KEY;
-  if (!apiKey) {
-    throw new Error("Manca la chiave API di Claude. Aggiungi REACT_APP_CLAUDE_API_KEY nel file .env");
-  }
+// ── API base URL ───────────────────────────────────────────────────────────────
+// In sviluppo locale: REACT_APP_API_URL=http://localhost:3004 (nel file .env)
+// In produzione Vercel: lascia REACT_APP_API_URL vuoto → usa URL relativo /api/claude
+const API_BASE = process.env.REACT_APP_API_URL ?? "";
 
-  const res = await fetch("http://localhost:3004/api/claude", {
+// ── Compressione immagini ──────────────────────────────────────────────────────
+// Ridimensiona a max 1024px e comprime JPEG 0.75 prima di salvare in localStorage
+// Una foto da smartphone può pesare 3–5 MB; compressa scende a ~100–300 KB
+function compressImage(dataUrl, maxPx = 1024, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+// ── callClaude ─────────────────────────────────────────────────────────────────
+// Il client non conosce mai la chiave API: passa sempre per il proxy server/serverless.
+// La chiave vive solo in server.js (locale) o nella variabile CLAUDE_API_KEY di Vercel.
+export async function callClaude(messages, systemPrompt) {
+  const res = await fetch(`${API_BASE}/api/claude`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -17,10 +41,19 @@ export async function callClaude(messages, systemPrompt) {
     })
   });
 
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message ||
+      `Errore del server proxy (${res.status}). Verifica che il server sia avviato.`
+    );
+  }
+
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
 
+// ── HealthBadge ────────────────────────────────────────────────────────────────
 export function HealthBadge({ score }) {
   if (score == null) return null;
   const s = parseInt(score, 10);
@@ -55,6 +88,7 @@ export function HealthBadge({ score }) {
   );
 }
 
+// ── PhotoInput ─────────────────────────────────────────────────────────────────
 export function PhotoInput({ onCapture }) {
   const fileRef = useRef();
   return (
@@ -77,13 +111,22 @@ export function PhotoInput({ onCapture }) {
         type="file"
         accept="image/*"
         style={{ display: "none" }}
-        onChange={e => {
+        onChange={async e => {
           const f = e.target.files[0];
           if (!f) return;
-          const r = new FileReader();
-          r.onload = ev => onCapture(ev.target.result, f.name);
-          r.readAsDataURL(f);
-          fileRef.current.removeAttribute("capture");
+          const reader = new FileReader();
+          reader.onload = async ev => {
+            try {
+              // Comprime prima di salvare (fix localStorage saturation)
+              const compressed = await compressImage(ev.target.result);
+              onCapture(compressed, f.name);
+            } catch {
+              // Fallback: usa immagine originale se la compressione fallisce
+              onCapture(ev.target.result, f.name);
+            }
+            fileRef.current.removeAttribute("capture");
+          };
+          reader.readAsDataURL(f);
         }}
       />
     </div>
